@@ -12,9 +12,15 @@ from googleapiclient.discovery import build
 
 class YoutubePlaylists():
     def __init__(self, CLIENT_SECRETS_FILE, CREDENTIALS_FILE):
+        # Get credentails from youtube
         def get_credentials(client_secrets, scope):
             flow = InstalledAppFlow.from_client_secrets_file(client_secrets, scope)
-            credentials = flow.run_local_server()
+            try:
+                credentials = flow.run_local_server()
+                logger.debug('Credentials successfully obtained from google')
+            except:
+                logger.error('Error trying to obtain credentials from google')
+                raise
             return credentials
 
         def save_credentials(credentials):
@@ -23,8 +29,13 @@ class YoutubePlaylists():
                          'client_id': credentials.client_id,
                          'client_secret': credentials.client_secret,
                          'token_uri': credentials.token_uri}
-            with open(CREDENTIALS_FILE, 'w') as output_file:
-                json.dump(cred_dict, output_file)
+            try:
+                with open(CREDENTIALS_FILE, 'w') as output_file:
+                    json.dump(cred_dict, output_file)
+                logger.debug('Credentials saved to drive')
+            except:
+                logger.error('Error saving credentials to drive')
+                raise
 
         logger = logging.getLogger(__name__)
         YOUTUBE_SCOPE = "https://www.googleapis.com/auth/youtube.readonly"
@@ -35,8 +46,10 @@ class YoutubePlaylists():
         try:
             with open(CREDENTIALS_FILE) as file:
                 credentials_dict = json.load(file)
+            logger.debug('Credentials successfully loaded from drive')
         except FileNotFoundError:
             credentials_dict = {}
+            logger.info('No saved credentials found')
 
         if credentials_dict:
             credentials = Credentials(**credentials_dict)
@@ -48,16 +61,20 @@ class YoutubePlaylists():
 
 
     def _request_youtube(self, request):
+        logger = logging.getLogger(__name__)
         try:
+            logger.debug(f'Requesting {request.uri}')
             response = request.execute()
             if 'error' in response:
                 error_code = response['error']['errors']['code']
                 error_message = response['error']['errors']['message']
-                raise ValueError('API error {} - {}'.format(error_code, error_message))
+                logger.error(f'API error {error_code} - {error_message}')
+                raise ValueError(f'API error {error_code} - {error_message}')
             else:
                 return response
         except:
-            raise ValueError('An error occured during interaction with Youtube: {}'.format(sys.exc_info()))
+            logger.error('An error occurred during interaction with Youtube: {}'.format(sys.exc_info()))
+            raise ValueError('An error occurred during interaction with Youtube: {}'.format(sys.exc_info()))
 
     def _get_all_pages(self, request_func, kwargs):
         request = request_func(**kwargs)
@@ -104,8 +121,13 @@ class YoutubePlaylists():
 
 class db():
     def __init__(self, DB_PATH):
-        self.con = sqlite3.connect(DB_PATH)
-        self.cur = self.con.cursor()
+        logger = logging.getLogger(__name__)
+        try:
+            self.con = sqlite3.connect(DB_PATH)
+            self.cur = self.con.cursor()
+        except:
+            logger.error('Error opening the db')
+            raise ValueError('Error opening the db')
 
     def close(self):
         self.cur.close()
@@ -286,7 +308,7 @@ def report_deleted_to_file(REPORT_PATH, deleted_video_title, deleted_video_playl
         file.write(report_line)
 
 def setup_logger(DEBUG_LEVEL):
-    formatter = logging.Formatter('%(asctime)s: %(message)s')
+    formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
     
     handler = logging.handlers.RotatingFileHandler('yps.log', mode='a', maxBytes=10485760, backupCount=0, encoding='utf-8')
     handler.setLevel(DEBUG_LEVEL)
