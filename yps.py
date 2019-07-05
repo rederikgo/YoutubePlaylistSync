@@ -126,13 +126,59 @@ class YoutubePlaylists():
 
 class db():
     def __init__(self, DB_PATH):
-        logger = logging.getLogger(__name__)
+        self.logger = logging.getLogger(__name__)
         try:
             self.con = sqlite3.connect(DB_PATH)
             self.cur = self.con.cursor()
         except:
-            logger.error('Error opening the db')
+            self.logger.error('Error opening the db')
             raise ValueError('Error opening the db')
+        self.test_schema()
+
+    def test_schema(self):
+        self.cur.execute("""
+            SELECT name
+            FROM sqlite_master
+        """)
+        tables = self.cur.fetchall()
+        tables = [a[0] for a in tables]
+        if 'playlists' not in tables:
+            self.logger.error('No \'playlists\' table in the database. Creating new one')
+            self.cur.execute("""
+                CREATE TABLE 'playlists' (
+                    'playlist_id' TEXT, 
+                    'playlist_title' TEXT,
+                    'added' TEXT, 
+                    PRIMARY KEY('playlist_id')
+                    )
+            """)
+
+        if 'videos' not in tables:
+            self.logger.error('No \'videos\' table in the database. Creating new one')
+            self.cur.execute("""
+                CREATE TABLE 'videos' (
+                    'video_id' TEXT, 
+                    'video_title' TEXT, 
+                    'video_descr' INTEGER, 
+                    'playlist_id' TEXT, 
+                    'is_deleted' TEXT, 
+                    'modified' TEXT,
+                    FOREIGN KEY('playlist_id') REFERENCES 'playlists'('playlist_id'), 
+                    PRIMARY KEY('video_id')
+                    )
+            """)
+
+        if 'playlists_w_videos' not in tables:
+            self.logger.error('No \'playlists_w_videos\' view in the database. Creating new one')
+            self.cur.execute("""
+                CREATE VIEW playlists_w_videos AS
+                SELECT playlists.playlist_title, videos.video_title, videos.video_descr, videos.is_deleted, videos.modified
+                FROM playlists
+                JOIN videos ON playlists.playlist_id = videos.playlist_id
+            """)
+
+        self.commit()
+
 
     def close(self):
         self.cur.close()
@@ -164,14 +210,15 @@ class db():
 
     def add_playlist(self, playlist_id, playlist_title):
         self.cur.execute("""
-            INSERT INTO playlists (playlist_id, playlist_title)
-            VALUES (?, ?)
+            INSERT INTO playlists (playlist_id, playlist_title, added)
+            VALUES (?, ?, DATETIME('now', 'utc'))
         """, (playlist_id, playlist_title))
 
 
     def add_video(self, video_id, video_title, video_descr, playlist_id):
         self.cur.execute("""
-            INSERT INTO videos (video_id, video_title, video_descr, playlist_id) VALUES (?, ?, ?, ?)
+            INSERT INTO videos (video_id, video_title, video_descr, playlist_id, modified) 
+            VALUES (?, ?, ?, ?, DATETIME('now', 'utc'))
         """, (video_id, video_title, video_descr, playlist_id))
 
     def remove_playlist(self, playlist_id):
@@ -201,7 +248,7 @@ class db():
     def mark_as_deleted(self, video_id):
         self.cur.execute("""
             UPDATE videos 
-            SET is_deleted = 'true' 
+            SET is_deleted = 'true', modified = DATETIME('now', 'utc') 
             WHERE video_id = ?
         """, (video_id, ))        
 
