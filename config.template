@@ -1,0 +1,13 @@
+db:
+    path: 'playlists.db'
+youtube:
+    secrets: 'client_secret.json'
+    credentials: 'creds.json'
+output:
+    report path: 'deleted_videos.txt'
+debug:
+    debug level: DEBUG
+    enable sentry: False
+    sentry dsn: ''
+    sentry appname: 'YoutubePlaylistSync'
+    sentry environment: 'dev'

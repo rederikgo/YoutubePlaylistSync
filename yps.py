@@ -5,9 +5,13 @@ import logging.handlers
 import sqlite3
 import sys
 
+
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from pythonjsonlogger import jsonlogger
+import sentry_sdk
+import yaml
 
 
 class YoutubePlaylists():
@@ -23,6 +27,7 @@ class YoutubePlaylists():
                 raise
             return credentials
 
+        # Save credentials for future reuse
         def save_credentials(credentials):
             cred_dict = {'refresh_token': credentials.refresh_token,
                          'token': credentials.token,
@@ -135,7 +140,7 @@ class db():
 
     def get_playlists(self):
         self.cur.execute("""
-            SELECT playlists.playlist_id, playlists.playlist_title
+            SELECT playlists.playlist_id, playlists.playlist_title 
             FROM playlists
         """)
         return self.cur.fetchall()
@@ -205,12 +210,25 @@ class db():
 
 
 def main():
-    CLIENT_SECRETS_FILE = 'client_secret.json'
-    CREDENTIALS_FILE = 'creds.json'
-    DB_PATH = 'playlists.db'
-    REPORT_PATH = 'deleted_videos.txt'
-    DEBUG_LEVEL = logging.DEBUG
+    # Load config
+    with open('config.yaml', 'r') as configfile:
+        cfg = yaml.safe_load(configfile)
+
+    # Setup sentry.io reporting
+    sentry_dsn = cfg['debug']['sentry dsn']
+    sentry_app_name = cfg['debug']['sentry appname']
+    sentry_environment = cfg['debug']['sentry environment']
+    enable_sentry = cfg['debug']['enable sentry']
+    if enable_sentry:
+        sentry_sdk.init(sentry_dsn, release=sentry_app_name, environment=sentry_environment)
+
+    CLIENT_SECRETS_FILE = cfg['youtube']['secrets']
+    CREDENTIALS_FILE = cfg['youtube']['credentials']
+    DB_PATH = cfg['db']['path']
+    REPORT_PATH = cfg['output']['report path']
+    DEBUG_LEVEL = cfg['debug']['debug level']
     
+    # Setup logging
     logger = setup_logger(DEBUG_LEVEL)
     logger.info('SESSION STARTED')
     
@@ -308,7 +326,7 @@ def report_deleted_to_file(REPORT_PATH, deleted_video_title, deleted_video_playl
         file.write(report_line)
 
 def setup_logger(DEBUG_LEVEL):
-    formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
+    formatter = jsonlogger.JsonFormatter('%(asctime)s %(levelname)s: %(message)s')
     
     handler = logging.handlers.RotatingFileHandler('yps.log', mode='a', maxBytes=10485760, backupCount=0, encoding='utf-8')
     handler.setLevel(DEBUG_LEVEL)
@@ -322,4 +340,3 @@ def setup_logger(DEBUG_LEVEL):
  
 
 main()
-quit
