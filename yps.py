@@ -1,34 +1,51 @@
 import datetime
+import json
 import logging
 import logging.handlers
 import sqlite3
 import sys
 
-import httplib2
-from oauth2client.file import Storage
-from apiclient.discovery import build
-from oauth2client.client import flow_from_clientsecrets
-from oauth2client.tools import run_flow
-import yaml
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+
 
 class YoutubePlaylists():
     def __init__(self, CLIENT_SECRETS_FILE, CREDENTIALS_FILE):
+        def get_credentials(client_secrets, scope):
+            flow = InstalledAppFlow.from_client_secrets_file(client_secrets, scope)
+            credentials = flow.run_local_server()
+            return credentials
+
+        def save_credentials(credentials):
+            cred_dict = {'refresh_token': credentials.refresh_token,
+                         'token': credentials.token,
+                         'client_id': credentials.client_id,
+                         'client_secret': credentials.client_secret,
+                         'token_uri': credentials.token_uri}
+            with open(CREDENTIALS_FILE, 'w') as output_file:
+                json.dump(cred_dict, output_file)
+
         logger = logging.getLogger(__name__)
-        # Login or create credentials
-        YOUTUBE_SCOPE = "https://www.googleapis.com/auth/youtube"
+        YOUTUBE_SCOPE = "https://www.googleapis.com/auth/youtube.readonly"
         YOUTUBE_API_SERVICE_NAME = "youtube"
         YOUTUBE_API_VERSION = "v3"
 
-        storage = Storage(CREDENTIALS_FILE)
-        credentials = storage.get()
-        if credentials is None or credentials.invalid:
-            logger.info('Credentials invalid. Initing oAuth flow...')
-            flow = flow_from_clientsecrets(CLIENT_SECRETS_FILE, scope=YOUTUBE_SCOPE, message='Nop')
-            credentials = run_flow(flow, storage)
-            logger.info('Credentials updated')
+        # Try to load credentials from file
+        try:
+            with open(CREDENTIALS_FILE) as file:
+                credentials_dict = json.load(file)
+        except FileNotFoundError:
+            credentials_dict = {}
 
-        self.service = build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION, http=credentials.authorize(httplib2.Http()))
-        
+        if credentials_dict:
+            credentials = Credentials(**credentials_dict)
+        else:
+            credentials = get_credentials(CLIENT_SECRETS_FILE, YOUTUBE_SCOPE)
+            save_credentials(credentials)
+
+        self.service = build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION, credentials=credentials)
+
 
     def _request_youtube(self, request):
         try:
@@ -88,6 +105,7 @@ class YoutubePlaylists():
             videos.append([video_id, video_title, video_descr])
 
         return videos
+
 
 class db():
     def __init__(self, DB_PATH):
@@ -168,8 +186,9 @@ class db():
     def commit(self):
         self.con.commit()
 
+
 def main():
-    CLIENT_SECRETS_FILE = 'client_id.json'
+    CLIENT_SECRETS_FILE = 'client_secret.json'
     CREDENTIALS_FILE = 'creds.json'
     DB_PATH = 'playlists.db'
     REPORT_PATH = 'deleted_videos.txt'
