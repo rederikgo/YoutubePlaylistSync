@@ -73,7 +73,7 @@ class YoutubePlaylists():
         return responses
 
     def get_playlists_list(self):
-        playlists = [['liked', 'liked']]
+        playlists = []
 
         request_playlists = self.service.playlists().list
         kwargs = {'part': 'snippet', 'mine': True}
@@ -89,14 +89,9 @@ class YoutubePlaylists():
     def get_videos_list(self, playlist_id):
         videos = []
 
-        if playlist_id == 'liked':
-            request_liked = self.service.videos().list
-            kwargs = {'part': 'snippet', 'myRating': 'like'}
-            videos_raw = self._get_all_pages(request_liked, kwargs)
-        else:
-            request_videos = self.service.playlistItems().list
-            kwargs = {'part': 'snippet', 'playlistId': playlist_id}
-            videos_raw = self._get_all_pages(request_videos, kwargs)
+        request_videos = self.service.playlistItems().list
+        kwargs = {'part': 'snippet', 'playlistId': playlist_id}
+        videos_raw = self._get_all_pages(request_videos, kwargs)
 
         for video in videos_raw:
             video_id = video['id']
